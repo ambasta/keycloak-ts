@@ -15,22 +15,29 @@ export const isObject = (input: unknown): boolean =>
   typeof input === "object" && input !== null;
 
 export const decodeToken = (token: string): IKeycloakTokenParsed => {
-  const [_header, payload] = token.split(".");
-  if (typeof payload !== "string")
+  const parts = token.split(".");
+  const payload = parts[1]; // The payload is the second part
+
+  if (typeof payload !== "string") {
     throw new Error("Unable to decode token, payload not found.");
+  }
+
   let decoded: string;
   try {
     decoded = base64UrlDecode(payload);
-  } catch (error) {
+  } catch (error: any) {
     throw new Error(
       "Unable to decode token, payload is not a valid Base64URL value.",
+      { cause: error },
     );
   }
+
   try {
-    return JSON.parse(decoded);
-  } catch {
+    return JSON.parse(decoded) as IKeycloakTokenParsed;
+  } catch (error: any) {
     throw new Error(
       "Unable to decode token, payload is not a valid JSON value.",
+      { cause: error },
     );
   }
 };
@@ -67,7 +74,8 @@ const b64DecodeUnicode = (input: string): string => {
 };
 
 export const bytesToBase64 = (bytes: Uint8Array): string => {
-  const binString = String.fromCharCode(...bytes);
+  // Use String.fromCodePoint for better Unicode support, matching lib/keycloak.js approach
+  const binString = String.fromCodePoint(...bytes);
   return btoa(binString);
 };
 
@@ -122,4 +130,33 @@ export const safeStringField = (
     return (obj as any)[field];
 
   return undefined;
+};
+
+export const stripTrailingSlash = (url: string): string => {
+  return url.endsWith("/") ? url.slice(0, -1) : url;
+};
+
+export const waitForTimeout = (delay: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, delay));
+
+export const generateRandomData = (len: number): Uint8Array => {
+  if (
+    typeof crypto === "undefined" ||
+    typeof crypto.getRandomValues === "undefined"
+  ) {
+    throw new Error("Web Crypto API is not available.");
+  }
+  return crypto.getRandomValues(new Uint8Array(len));
+};
+
+export const generateRandomString = (
+  len: number,
+  alphabet: string,
+): string => {
+  const randomData = generateRandomData(len);
+  const chars = new Array(len);
+  for (let i = 0; i < len; i++) {
+    chars[i] = alphabet.charCodeAt(randomData[i] % alphabet.length);
+  }
+  return String.fromCharCode(...chars);
 };
