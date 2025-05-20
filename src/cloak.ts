@@ -1,10 +1,5 @@
-import {
-  randomUUID,
-  randomBytes,
-  createHash,
-  getRandomValues,
-  subtle,
-} from "crypto";
+import { randomUUID } from "crypto";
+
 import type {
   IAccessTokenResponse,
   IJsonConfig,
@@ -16,110 +11,28 @@ import type {
   IKeycloakLogoutOptions,
   IKeycloakProfile,
   IKeycloakRegisterOptions,
-  INetworkErrorOptions,
   IOpenIdProviderMetadata,
   KeycloakFlow,
   KeycloakResponseMode,
 } from "./types.ts";
-import type { IEndpoints } from "./helpers.ts";
+import {
+  decodeToken,
+  isObject,
+  sha256Digest,
+  type IEndpoints,
+} from "./helpers.ts";
+import { NetworkError } from "./error.ts";
+import { createCallbackStorage } from "./storage.ts";
+import { generateCodeVerifier, generatePkceChallenge } from "./pkce.ts";
 
 const CONTENT_TYPE_JSON = "application/json";
-const STORAGE_KEY_PREFIX = "kc-callback-";
-
-const isObject = <T extends Record<string, unknown>>(val: unknown): val is T =>
-  typeof val === "object" && val !== null;
 
 const arrayHas = <T>(arr: readonly T[], val: T): boolean => arr.includes(val);
-
-const base64UrlDecode = (input: string): string => {
-  let output = input.replace(/-/g, "+").replace(/_/g, "/");
-  switch (output.length % 4) {
-    case 2:
-      output += "==";
-      break;
-    case 3:
-      output += "=";
-      break;
-  }
-  try {
-    return atob(output);
-  } catch {
-    if (typeof Buffer !== "undefined")
-      return Buffer.from(output, "base64").toString("utf-8");
-    throw new Error("Unable to decode base64url input");
-  }
-};
-
-const b64DecodeUnicode = (input: string): string => {
-  return decodeURIComponent(
-    atob(input)
-      .split("")
-      .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-      .join(""),
-  );
-};
-
-const decodeToken = (token: string): Record<string, unknown> => {
-  const parts = token.split(".");
-  if (parts.length !== 3) throw new Error("Token is not a valid JWT");
-  const decoded = base64UrlDecode(parts[1]);
-  try {
-    return JSON.parse(decoded);
-  } catch {
-    throw new Error("Unable to decode token payload");
-  }
-};
 
 const buildAuthorizationHeader = (token: string): [string, string] => {
   if (!token) throw new Error("Token required for Authorization header");
   return ["Authorization", `Bearer ${token}`];
 };
-
-const generateRandomString = (length: number, alphabet: string): string => {
-  const random = getRandomValues(new Uint8Array(length)) ?? randomBytes(length);
-  return Array.from(
-    { length },
-    (_, idx) => alphabet[random[idx] % alphabet.length],
-  ).join("");
-};
-
-const generateCodeVerifier = (length: number): string =>
-  generateRandomString(
-    length,
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
-  );
-
-const sha256Digest = async (message: string): Promise<ArrayBuffer> =>
-  (await subtle.digest("SHA-256", new TextEncoder().encode(message))) ??
-  createHash("sha256").update(message).digest();
-
-const bytesToBase64 = (bytes: Uint8Array): string => {
-  if (typeof btoa !== "undefined") {
-    return btoa(String.fromCharCode(...bytes));
-  }
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(bytes).toString("base64");
-  }
-  throw new Error("Base64 not supported in this environment");
-};
-
-const generatePkceChallenge = async (
-  pkceMethod: string,
-  codeVerifier: string,
-): Promise<string> => {
-  if (pkceMethod !== "S256")
-    throw new TypeError("Invalid PKCE method, expected S256");
-  const hash = new Uint8Array(await sha256Digest(codeVerifier));
-  return bytesToBase64(hash)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-};
-
-const createUUID = (): string =>
-  typeof randomUUID === "function"
-    ? randomUUID()
-    : generateRandomString(36, "abcdefghijklmnopqrstuvwxyz0123456789");
 
 const createLogger =
   (fn: (...args: unknown[]) => void) =>
@@ -158,120 +71,6 @@ interface ICallbackState {
   pkceCodeVerifier?: string;
   expires?: number;
 }
-
-class LocalStorageCallbackStorage {
-  public get(state: string): ICallbackState | undefined {
-    if (!state) return undefined;
-    const key = STORAGE_KEY_PREFIX + state;
-    const value = localStorage.getItem(key);
-    if (value) {
-      localStorage.removeItem(key);
-      return JSON.parse(value);
-    }
-    this.clearInvalidValues();
-    return undefined;
-  }
-
-  public add(state: ICallbackState): void {
-    this.clearInvalidValues();
-    const key = STORAGE_KEY_PREFIX + state.state;
-    const value = JSON.stringify({
-      ...state,
-      expires: Date.now() + 60 * 60 * 1000,
-    });
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      this.clearAllValues();
-      localStorage.setItem(key, value);
-    }
-  }
-
-  private clearInvalidValues(): void {
-    const now = Date.now();
-    Object.entries(localStorage)
-      .filter(([key]) => key.startsWith(STORAGE_KEY_PREFIX))
-      .forEach(([key, value]) => {
-        const expiry = (() => {
-          try {
-            return JSON.parse(value).expires;
-          } catch {
-            return;
-          }
-        })();
-        if (expiry === undefined || expiry < now) localStorage.removeItem(key);
-      });
-  }
-
-  private clearAllValues(): void {
-    Object.keys(localStorage)
-      .filter((key) => key.startsWith(STORAGE_KEY_PREFIX))
-      .forEach((key) => localStorage.removeItem(key));
-  }
-}
-
-class CookieStorageCallbackStorage {
-  public get(state: string): ICallbackState | undefined {
-    if (!state) return undefined;
-    const value = this.getCookie(STORAGE_KEY_PREFIX + state);
-    this.setCookie(STORAGE_KEY_PREFIX + state, "", this.cookieExpiration(-100));
-    return value ? JSON.parse(value) : undefined;
-  }
-
-  public add(state: ICallbackState): void {
-    this.setCookie(
-      STORAGE_KEY_PREFIX + state.state,
-      JSON.stringify(state),
-      this.cookieExpiration(60),
-    );
-  }
-
-  private cookieExpiration(minutes: number): Date {
-    const exp = new Date();
-    exp.setTime(exp.getTime() + minutes * 60 * 1000);
-    return exp;
-  }
-
-  private getCookie(key: string): string {
-    const name = key + "=";
-    return (
-      document.cookie
-        .split(";")
-        .map((c) => c.trim())
-        .find((c) => c.startsWith(name))
-        ?.substring(name.length) ?? ""
-    );
-  }
-
-  private setCookie(key: string, value: string, expirationDate: Date): void {
-    document.cookie = `${key}=${value}; expires=${expirationDate.toUTCString()};`;
-  }
-}
-
-const createCallbackStorage = (): {
-  get: (state: string) => ICallbackState | undefined;
-  add: (state: ICallbackState) => void;
-} => {
-  try {
-    localStorage.setItem("kc-test", "test");
-    localStorage.removeItem("kc-test");
-    return new LocalStorageCallbackStorage();
-  } catch {
-    return new CookieStorageCallbackStorage();
-  }
-};
-
-// --- NETWORK ERROR ---
-
-export class NetworkError extends Error {
-  public response: Response;
-  constructor(message: string, options: INetworkErrorOptions) {
-    super(message);
-    this.response = options.response;
-  }
-}
-
-// --- ADAPTERS ---
 
 const defaultAdapter = (kc: Keycloak): IKeycloakAdapter => ({
   login: async (options?: IKeycloakLoginOptions) => {
@@ -780,8 +579,8 @@ export class Keycloak {
   public createLoginUrl = async (
     options?: IKeycloakLoginOptions,
   ): Promise<string> => {
-    const state = createUUID();
-    const nonce = createUUID();
+    const state = randomUUID();
+    const nonce = randomUUID();
     const redirectUri = this.adapter.redirectUri(options);
     const callbackState: ICallbackState = {
       state,
