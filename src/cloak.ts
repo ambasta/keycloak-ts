@@ -5,7 +5,7 @@ import type {
   IJsonConfig,
   IKeycloakAccountOptions,
   IKeycloakAdapter,
-  KeycloakConfigObject, // Updated type
+  KeycloakConfigObject,
   IKeycloakInitOptions,
   IKeycloakLoginOptions,
   IKeycloakLogoutOptions,
@@ -14,15 +14,14 @@ import type {
   IOpenIdProviderMetadata,
   KeycloakFlow,
   KeycloakResponseMode,
+  IEndpoints,
 } from "./types.ts";
 import {
-  buildClaimsParameter, // Added import
+  buildClaimsParameter,
   decodeToken,
-  applyTimeoutToPromise, // Added import
+  applyTimeoutToPromise,
   isObject,
-  sha256Digest,
-  stripTrailingSlash, 
-  type IEndpoints,
+  stripTrailingSlash,
 } from "./helpers.ts";
 import { NetworkError } from "./error.ts";
 import { createCallbackStorage } from "./storage.ts";
@@ -69,12 +68,10 @@ const fetchJSON = async <T = unknown>(
   return (await response.json()) as T;
 };
 
-// ICallbackState has been moved to src/types.ts
-
 const defaultAdapter = (kc: Keycloak): IKeycloakAdapter => ({
   login: async (options?: IKeycloakLoginOptions) => {
     window.location.assign(await kc.createLoginUrl(options));
-    return new Promise<void>(() => {}); // Add unresolved promise
+    return new Promise<void>(() => {});
   },
   logout: async (options?: IKeycloakLogoutOptions) => {
     const logoutMethod = options?.logoutMethod ?? kc.logoutMethod;
@@ -104,22 +101,21 @@ const defaultAdapter = (kc: Keycloak): IKeycloakAdapter => ({
   },
   register: async (options?: IKeycloakRegisterOptions) => {
     window.location.assign(await kc.createRegisterUrl(options));
-    return new Promise<void>(() => {}); // Add unresolved promise
+    return new Promise<void>(() => {});
   },
-  accountManagement: async () => { // Make async to return a Promise
+  accountManagement: async () => {
     const accountUrl = kc.createAccountUrl();
     if (accountUrl) {
       window.location.href = accountUrl;
     } else {
       throw new Error("Not supported by the OIDC server");
     }
-    return new Promise<void>(() => {}); // Add unresolved promise
+    return new Promise<void>(() => {});
   },
   redirectUri: (options?: { redirectUri?: string }) =>
     options?.redirectUri || kc.redirectUri || location.href,
 });
 
-// --- KEYCLOAK MAIN CLASS ---
 interface IPromiseBox {
   setSuccess: (value?: unknown) => void;
   setError: (value?: unknown) => void;
@@ -134,55 +130,50 @@ interface ILoginIFrameOptions {
 }
 
 export class Keycloak {
-  // Required config values
   clientId!: string;
   realm!: string;
   authServerUrl?: string;
 
-  // Stateful properties
-  public authenticated = false;
-  public didInitialize = false;
-  public profile?: IKeycloakProfile;
-  public userInfo?: Record<string, unknown>;
-  public token?: string;
-  public refreshToken?: string;
-  public idToken?: string;
-  public tokenParsed?: Record<string, unknown>;
-  public refreshTokenParsed?: Record<string, unknown>;
-  public idTokenParsed?: Record<string, unknown>;
-  public sessionId?: string;
-  public subject?: string;
-  public realmAccess?: { roles: string[] };
-  public resourceAccess?: Record<string, { roles: string[] }>;
-  public timeSkew?: number;
-  public flow: KeycloakFlow = "standard";
-  public responseMode: KeycloakResponseMode = "fragment";
-  public responseType = "code";
-  public pkceMethod: "S256" | false = "S256";
-  public scope?: string;
-  public enableLogging = false;
-  public silentCheckSsoRedirectUri?: string | false; // Allow false
-  public silentCheckSsoFallback = true;
-  public redirectUri?: string;
-  public logoutMethod: "GET" | "POST" = "GET";
-  public messageReceiveTimeout = 10000;
+  authenticated = false;
+  didInitialize = false;
+  profile?: IKeycloakProfile;
+  userInfo?: Record<string, unknown>;
+  token?: string;
+  refreshToken?: string;
+  idToken?: string;
+  tokenParsed?: Record<string, unknown>;
+  refreshTokenParsed?: Record<string, unknown>;
+  idTokenParsed?: Record<string, unknown>;
+  sessionId?: string;
+  subject?: string;
+  realmAccess?: { roles: string[] };
+  resourceAccess?: Record<string, { roles: string[] }>;
+  timeSkew?: number;
+  flow: KeycloakFlow = "standard";
+  responseMode: KeycloakResponseMode = "fragment";
+  responseType = "code";
+  pkceMethod: "S256" | false = "S256";
+  scope?: string;
+  enableLogging = false;
+  silentCheckSsoRedirectUri?: string | false;
+  silentCheckSsoFallback = true;
+  redirectUri?: string;
+  logoutMethod: "GET" | "POST" = "GET";
+  messageReceiveTimeout = 10000;
 
-  // Endpoints and adapter
-  public endpoints!: IEndpoints;
-  public adapter!: IKeycloakAdapter;
+  endpoints!: IEndpoints;
+  adapter!: IKeycloakAdapter;
 
-  // Events
-  public onReady?: (authenticated: boolean) => void;
-  public onAuthSuccess?: () => void;
-  public onAuthError?: (err?: unknown) => void;
-  public onActionUpdate?: (status: string, action: string) => void;
-  public onAuthRefreshSuccess?: () => void;
-  public onAuthRefreshError?: () => void;
-  public onAuthLogout?: () => void;
-  public onTokenExpired?: () => void;
+  onReady?: (authenticated: boolean) => void;
+  onAuthSuccess?: () => void;
+  onAuthError?: (err?: unknown) => void;
+  onActionUpdate?: (status: string, action: string) => void;
+  onAuthRefreshSuccess?: () => void;
+  onAuthRefreshError?: () => void;
+  onAuthLogout?: () => void;
+  onTokenExpired?: () => void;
 
-  // Private members
-  #config: KeycloakConfigObject | string; // Updated type
+  #config: KeycloakConfigObject | string;
   #loginIframe: ILoginIFrameOptions = {
     enable: true,
     callbackList: [],
@@ -196,7 +187,6 @@ export class Keycloak {
     setError: (v?: unknown) => void;
   }> = [];
 
-  // New private fields for init options and logging
   #onLoad?: IKeycloakInitOptions["onLoad"];
   #loginRequired = false;
   #logInfo = createLogger(console.info);
@@ -214,10 +204,9 @@ export class Keycloak {
     }
 
     if (isObject(config)) {
-      // Type guard to assert config is KeycloakConfigObject for property checking
       const configObj = config as KeycloakConfigObject;
       const requiredProperties =
-        "oidcProvider" in configObj && configObj.oidcProvider // Check if oidcProvider is truthy
+        "oidcProvider" in configObj && configObj.oidcProvider
           ? ["clientId"]
           : ["url", "realm", "clientId"];
 
@@ -238,29 +227,22 @@ export class Keycloak {
     }
   }
 
-  public init = async (
-    initOptions: IKeycloakInitOptions = {},
-  ): Promise<boolean> => {
+  init = async (initOptions: IKeycloakInitOptions = {}): Promise<boolean> => {
     if (this.didInitialize)
       throw new Error("Keycloak instance already initialized");
     this.didInitialize = true;
     this.authenticated = false;
 
-    // Adapter loading (only "default" is implemented here, for cross-platform Node/Browser)
     this.adapter = defaultAdapter(this);
 
-    // Option handling
     if (typeof initOptions.useNonce !== "undefined")
       this.#useNonce = initOptions.useNonce;
     if (typeof initOptions.checkLoginIframe !== "undefined")
       this.#loginIframe.enable = initOptions.checkLoginIframe;
     if (initOptions.checkLoginIframeInterval)
       this.#loginIframe.interval = initOptions.checkLoginIframeInterval;
-    if (initOptions.onLoad === "login-required")
-      this.#loginRequired = true; // Use private field
-    if (initOptions.onLoad) {
-      this.#onLoad = initOptions.onLoad; // Store onLoad option
-    }
+    if (initOptions.onLoad === "login-required") this.#loginRequired = true;
+    if (initOptions.onLoad) this.#onLoad = initOptions.onLoad;
     if (initOptions.responseMode) this.responseMode = initOptions.responseMode;
     if (initOptions.flow) {
       switch (initOptions.flow) {
@@ -310,41 +292,31 @@ export class Keycloak {
 
     await this.#loadConfig();
 
-    // (handle SSO login, token parsing, silent check, etc...)
-
-    // --- START OF NEW INIT LOGIC STRUCTURE ---
-    await this.#loadConfig(); // Already called and refactored.
+    await this.#loadConfig();
     await this.check3pCookiesSupported();
     await this.#processInit(initOptions);
     this.onReady?.(this.authenticated);
     return this.authenticated;
-    // --- END OF NEW INIT LOGIC STRUCTURE ---
   };
 
-  // Stubs for new private methods - implementation will follow in subsequent steps
   #processInit = async (initOptions: IKeycloakInitOptions): Promise<void> => {
     const callback = this.parseCallback(window.location.href);
 
     if (callback?.valid) {
       this.#logInfo("[KEYCLOAK] Processing callback from URL");
-      if (callback.newUrl && typeof window !== "undefined" && window.history) {
-        window.history.replaceState(window.history.state, null, callback.newUrl);
-      }
+      if (callback.newUrl && typeof window !== "undefined" && window.history)
+        window.history.replaceState(window.history.state, "", callback.newUrl);
+
       await this.setupCheckLoginIframe();
       try {
         const cbResult = await this.#processCallback(callback);
-        
+
         if (cbResult.kcActionStatus && this.onActionUpdate) {
           this.onActionUpdate(cbResult.kcActionStatus, cbResult.kcAction!);
         }
 
         if (cbResult.isPromptNoneError) {
-          // Error handled silently for prompt=none, no tokens set.
-          // No onAuthSuccess, no onAuthError from this path explicitly here.
-          // The 'authenticated' flag remains as is (likely false).
-          // If #onLoad is present, it might be processed later.
         } else {
-          // Success path (tokens set, nonce OK by #processCallback)
           this.onAuthSuccess?.();
           if (this.#loginIframe.enable) {
             this.scheduleCheckIframe();
@@ -352,26 +324,36 @@ export class Keycloak {
         }
       } catch (error: any) {
         this.#logWarn("[KEYCLOAK] Error processing callback from URL:", error);
-        // Check for authentication_expired to attempt re-login
-        if (error.error_description === "authentication_expired" && error.loginOptions) {
-          this.#logInfo("[KEYCLOAK] Authentication expired, attempting re-login.");
-          await this.login(error.loginOptions); // This will redirect
-          // Normally, execution stops here due to redirect.
-          // To be extremely safe in a non-browser env or if redirect is delayed:
-          return; // Stop further processing in #processInit
+
+        if (
+          error.error_description === "authentication_expired" &&
+          error.loginOptions
+        ) {
+          this.#logInfo(
+            "[KEYCLOAK] Authentication expired, attempting re-login.",
+          );
+          await this.login(error.loginOptions);
+
+          return;
         }
-        this.onAuthError?.(error); // Emit error for other cases
-        // If there was an error, and onLoad is set, it might trigger subsequent actions
+        this.onAuthError?.(error);
+
         if (this.#onLoad) {
           await this.#handleOnLoad(initOptions);
         }
       }
-      return; // Callback processed or error handled (including potential redirect)
+      return;
     }
 
     if (initOptions.token && initOptions.refreshToken) {
-      this.#logInfo("[KEYCLOAK] Using token and refreshToken provided in initOptions");
-      this.#setToken(initOptions.token, initOptions.refreshToken, initOptions.idToken);
+      this.#logInfo(
+        "[KEYCLOAK] Using token and refreshToken provided in initOptions",
+      );
+      this.#setToken(
+        initOptions.token,
+        initOptions.refreshToken,
+        initOptions.idToken,
+      );
 
       if (this.#loginIframe.enable) {
         await this.setupCheckLoginIframe();
@@ -381,54 +363,49 @@ export class Keycloak {
             this.onAuthSuccess?.();
             this.scheduleCheckIframe();
           } else {
-            // Token state might have changed, lib/keycloak.js behavior is nuanced here.
-            // It doesn't explicitly clearToken but relies on checkLoginIframe's message handler.
-            // For now, if not unchanged, it implies a potential state mismatch.
-            // Depending on strictness, one might clearToken or try to refresh.
-            // lib/keycloak.js proceeds to onAuthSuccess if checkLoginIframe doesn't error.
-            // The 'changed' message in checkLoginIframe's handler *does* clearToken.
-            // Assuming checkLoginIframe itself would throw or its handler clears token if problematic.
-            // If it resolves, and was 'changed', token is already cleared.
-            // If it resolved 'unchanged', then onAuthSuccess is correct.
-            // If checkLoginIframe threw, it's caught below.
-             this.#logInfo("[KEYCLOAK] Login iframe check returned 'changed', token may have been cleared by iframe handler.");
-             // If token was cleared, authenticated would be false.
-             // If not cleared, onAuthSuccess is fine.
-             if (this.authenticated) {
-                this.onAuthSuccess?.();
-                this.scheduleCheckIframe();
-             } else {
-                // Token was cleared by iframe's 'changed' message, effectively a silent logout
-                // If loginRequired, this might trigger a new login via #handleOnLoad
-                if (this.#onLoad) {
-                    await this.#handleOnLoad(initOptions);
-                }
-             }
+            this.#logInfo(
+              "[KEYCLOAK] Login iframe check returned 'changed', token may have been cleared by iframe handler.",
+            );
+
+            if (this.authenticated) {
+              this.onAuthSuccess?.();
+              this.scheduleCheckIframe();
+            } else {
+              if (this.#onLoad) {
+                await this.#handleOnLoad(initOptions);
+              }
+            }
           }
         } catch (iframeError) {
-            this.#logWarn("[KEYCLOAK] Error during checkLoginIframe with existing token:", iframeError);
-            // Similar to updateToken error, decide if #handleOnLoad or rethrow
-            if (this.#onLoad) {
-                await this.#handleOnLoad(initOptions);
-            } else {
-                throw iframeError; // Rethrow if onLoad not set to handle it
-            }
+          this.#logWarn(
+            "[KEYCLOAK] Error during checkLoginIframe with existing token:",
+            iframeError,
+          );
+
+          if (this.#onLoad) {
+            await this.#handleOnLoad(initOptions);
+          } else {
+            throw iframeError;
+          }
         }
-      } else { // loginIframe disabled
+      } else {
         try {
-          await this.updateToken(-1); // Force refresh
+          await this.updateToken(-1);
           this.onAuthSuccess?.();
         } catch (error) {
-          this.#logWarn("[KEYCLOAK] Error refreshing token with existing token:", error);
+          this.#logWarn(
+            "[KEYCLOAK] Error refreshing token with existing token:",
+            error,
+          );
           this.onAuthError?.(error);
           if (this.#onLoad) {
             await this.#handleOnLoad(initOptions);
           } else {
-            throw error; // Rethrow if onLoad not set to handle it
+            throw error;
           }
         }
       }
-      return; // Tokens from initOptions processed
+      return;
     }
 
     if (this.#onLoad) {
@@ -437,7 +414,9 @@ export class Keycloak {
   };
 
   #handleOnLoad = async (initOptions: IKeycloakInitOptions): Promise<void> => {
-    this.#logInfo(`[KEYCLOAK] #handleOnLoad called with onLoad: ${this.#onLoad}`);
+    this.#logInfo(
+      `[KEYCLOAK] #handleOnLoad called with onLoad: ${this.#onLoad}`,
+    );
     switch (this.#onLoad) {
       case "check-sso":
         if (this.#loginIframe.enable) {
@@ -445,31 +424,29 @@ export class Keycloak {
           try {
             const unchanged = await this.checkLoginIframe();
             if (!unchanged) {
-              // Token state changed or needs verification
               if (this.silentCheckSsoRedirectUri) {
                 await this.#checkSsoSilently(initOptions);
               } else {
-                await this.#doLogin(false, initOptions.locale); // prompt=false
+                await this.#doLogin(false, initOptions.locale);
               }
             } else {
-              // If unchanged, and we have a token, it implies SSO is working.
-              // If no token, it means user is not logged in via SSO.
-              // lib/keycloak.js doesn't explicitly emit onAuthSuccess here,
-              // it's usually emitted after a token is obtained/validated.
-              // If checkLoginIframe indicates 'unchanged' with existing valid token, onAuthSuccess was already called.
-              // If 'unchanged' with no token, then nothing to do, user is not logged in.
-              this.#logInfo("[KEYCLOAK] check-sso: Login iframe check returned unchanged.");
+              this.#logInfo(
+                "[KEYCLOAK] check-sso: Login iframe check returned unchanged.",
+              );
             }
           } catch (error) {
-            this.#logWarn("[KEYCLOAK] check-sso: Error during checkLoginIframe", error);
-            // Fallback to login or silent check on error
+            this.#logWarn(
+              "[KEYCLOAK] check-sso: Error during checkLoginIframe",
+              error,
+            );
+
             if (this.silentCheckSsoRedirectUri) {
               await this.#checkSsoSilently(initOptions);
             } else {
               await this.#doLogin(false, initOptions.locale);
             }
           }
-        } else { // loginIframe disabled
+        } else {
           if (this.silentCheckSsoRedirectUri) {
             await this.#checkSsoSilently(initOptions);
           } else {
@@ -478,12 +455,10 @@ export class Keycloak {
         }
         break;
       case "login-required":
-        await this.#doLogin(true, initOptions.locale); // prompt=true
+        await this.#doLogin(true, initOptions.locale);
         break;
       default:
-        // This case should ideally not be reached if #onLoad is validated.
-        // If #onLoad is undefined, this method should not have been called.
-        if (this.#onLoad) { // Only throw if #onLoad had an unexpected value
+        if (this.#onLoad) {
           throw new Error(`Invalid value for onLoad: ${this.#onLoad}`);
         }
         break;
@@ -491,8 +466,9 @@ export class Keycloak {
   };
 
   #doLogin = async (prompt: boolean, locale?: string): Promise<void> => {
-    // Placeholder for logic from lib/keycloak.js's doLogin()
-    this.#logInfo(`[KEYCLOAK] #doLogin called with prompt: ${prompt}, locale: ${locale}`);
+    this.#logInfo(
+      `[KEYCLOAK] #doLogin called with prompt: ${prompt}, locale: ${locale}`,
+    );
     const loginOptions: IKeycloakLoginOptions = { locale };
     if (!prompt) {
       loginOptions.prompt = "none";
@@ -500,10 +476,16 @@ export class Keycloak {
     await this.login(loginOptions);
   };
 
-  #checkSsoSilently = async (initOptions: IKeycloakInitOptions): Promise<void> => {
-    this.#logInfo(`[KEYCLOAK] #checkSsoSilently called, locale: ${initOptions.locale}`);
+  #checkSsoSilently = async (
+    initOptions: IKeycloakInitOptions,
+  ): Promise<void> => {
+    this.#logInfo(
+      `[KEYCLOAK] #checkSsoSilently called, locale: ${initOptions.locale}`,
+    );
     if (!this.silentCheckSsoRedirectUri) {
-      this.#logWarn("[KEYCLOAK] silentCheckSsoRedirectUri is not configured. Skipping silent SSO check.");
+      this.#logWarn(
+        "[KEYCLOAK] silentCheckSsoRedirectUri is not configured. Skipping silent SSO check.",
+      );
       return;
     }
 
@@ -518,7 +500,10 @@ export class Keycloak {
     const src = await this.createLoginUrl(loginUrlOptions);
 
     iframe.setAttribute("src", src);
-    iframe.setAttribute("sandbox", "allow-storage-access-by-user-activation allow-scripts allow-same-origin");
+    iframe.setAttribute(
+      "sandbox",
+      "allow-storage-access-by-user-activation allow-scripts allow-same-origin",
+    );
     iframe.setAttribute("title", "keycloak-silent-check-sso");
     iframe.style.display = "none";
     document.body.appendChild(iframe);
@@ -528,19 +513,18 @@ export class Keycloak {
     const promise = new Promise<void>((resolve, reject) => {
       const messageCallback = async (event: MessageEvent) => {
         if (
-          event.origin !== window.location.origin || // Check origin if iframe is on same origin
-          iframe.contentWindow !== event.source || // Check source
-          typeof event.data !== 'string' // Ensure data is a string (URL)
+          event.origin !== window.location.origin ||
+          iframe.contentWindow !== event.source ||
+          typeof event.data !== "string"
         ) {
           return;
         }
 
-        // Clear timeout if message received
         if (timeoutHandle) {
           window.clearTimeout(timeoutHandle);
           timeoutHandle = undefined;
         }
-        
+
         window.removeEventListener("message", messageCallback);
         document.body.removeChild(iframe);
 
@@ -554,24 +538,30 @@ export class Keycloak {
             }
 
             if (cbResult.isPromptNoneError) {
-              // Error handled silently for prompt=none.
-              // For silent SSO, this typically means no active session or user chose not to grant.
-              this.#logInfo("[KEYCLOAK] Silent SSO check resulted in a prompt=none error response.");
+              this.#logInfo(
+                "[KEYCLOAK] Silent SSO check resulted in a prompt=none error response.",
+              );
             } else {
-              // Success (tokens set, nonce OK by #processCallback)
               this.onAuthSuccess?.();
-              // scheduleCheckIframe is usually not called after silent SSO by lib/keycloak.js,
-              // as it's part of an ongoing session status check. The main scheduleCheckIframe loop would continue.
             }
             resolve();
-          } catch (error: any) { // Catch errors from #processCallback (e.g., invalid_nonce)
-            this.#logWarn("[KEYCLOAK] Error processing silent SSO callback:", error);
+          } catch (error: any) {
+            this.#logWarn(
+              "[KEYCLOAK] Error processing silent SSO callback:",
+              error,
+            );
             this.onAuthError?.(error);
             reject(error);
           }
         } else {
-          const errorData = { error: "invalid_sso_callback", error_description: "Callback from silent SSO iframe was not valid." };
-          this.#logWarn("[KEYCLOAK] Invalid callback from silent SSO iframe", oauth);
+          const errorData = {
+            error: "invalid_sso_callback",
+            error_description: "Callback from silent SSO iframe was not valid.",
+          };
+          this.#logWarn(
+            "[KEYCLOAK] Invalid callback from silent SSO iframe",
+            oauth,
+          );
           this.onAuthError?.(errorData);
           reject(errorData);
         }
@@ -582,7 +572,9 @@ export class Keycloak {
       timeoutHandle = window.setTimeout(() => {
         window.removeEventListener("message", messageCallback);
         document.body.removeChild(iframe);
-        this.#logWarn("[KEYCLOAK] Timeout waiting for silent SSO iframe message.");
+        this.#logWarn(
+          "[KEYCLOAK] Timeout waiting for silent SSO iframe message.",
+        );
         reject({ error: "Timeout_waiting_for_silent_SSO_iframe" });
       }, this.messageReceiveTimeout);
     });
@@ -601,18 +593,22 @@ export class Keycloak {
     return undefined;
   };
 
-  #processCallback = async (oauth: Record<string, any>): Promise<{
+  #processCallback = async (
+    oauth: Record<string, any>,
+  ): Promise<{
     kcActionStatus?: string;
     kcAction?: string;
-    prompt?: string; // Pass prompt through for decision making by caller
-    loginOptions?: IKeycloakLoginOptions; // Pass loginOptions through
+    prompt?: string;
+    loginOptions?: IKeycloakLoginOptions;
     isPromptNoneError?: boolean;
   }> => {
     const code = oauth.code as string | undefined;
     const error = oauth.error as string | undefined;
-    const prompt = oauth.prompt as string | undefined; // From stored callback state
-    const loginOptions = oauth.loginOptions as IKeycloakLoginOptions | undefined;
-    let timeLocal = Date.now(); // Initial value, reset before async ops if averaged after
+    const prompt = oauth.prompt as string | undefined;
+    const loginOptions = oauth.loginOptions as
+      | IKeycloakLoginOptions
+      | undefined;
+    let timeLocal = Date.now();
 
     const _handleTokenResponse = (
       accessToken?: string,
@@ -620,62 +616,59 @@ export class Keycloak {
       idToken?: string,
       isImplicitOrHybridSuccess = false,
     ): void => {
-      if (!isImplicitOrHybridSuccess) { // For code flow, average time after async op
+      if (!isImplicitOrHybridSuccess) {
         timeLocal = (timeLocal + Date.now()) / 2;
       }
-      // For implicit/hybrid, timeLocal is effectively Date.now() before this call.
-      
+
       this.#setToken(accessToken, refreshToken, idToken, timeLocal);
 
       if (this.#useNonce && this.idTokenParsed?.nonce !== oauth.storedNonce) {
         this.#logInfo("[KEYCLOAK] Invalid nonce, clearing token");
         this.clearToken();
-        throw { error: "invalid_nonce", error_description: "Invalid nonce" }; 
+        throw { error: "invalid_nonce", error_description: "Invalid nonce" };
       }
     };
-    
-    const result: { 
-      kcActionStatus?: string; 
-      kcAction?: string; 
+
+    const result: {
+      kcActionStatus?: string;
+      kcAction?: string;
       prompt?: string;
       loginOptions?: IKeycloakLoginOptions;
       isPromptNoneError?: boolean;
     } = { prompt, loginOptions };
 
     if (oauth["kc_action_status"]) {
-        result.kcActionStatus = oauth["kc_action_status"] as string;
-        result.kcAction = oauth["kc_action"] as string;
+      result.kcActionStatus = oauth["kc_action_status"] as string;
+      result.kcAction = oauth["kc_action"] as string;
     }
 
     if (error) {
       if (prompt === "none") {
         result.isPromptNoneError = true;
-        return result; // Resolve for prompt=none errors, caller decides action
+        return result;
       }
       const errorData = {
         error,
         error_description: oauth.error_description as string | undefined,
         error_uri: oauth.error_uri as string | undefined,
-        prompt, // Include prompt in errorData for caller
-        loginOptions, // Include loginOptions for caller
+        prompt,
+        loginOptions,
       };
-      throw errorData; // Throw for non-prompt=none errors
+      throw errorData;
     }
 
-    // Implicit or Hybrid flow with tokens in URL
     if (this.flow !== "standard" && (oauth.access_token || oauth.id_token)) {
       _handleTokenResponse(
         oauth.access_token as string,
         oauth.refresh_token as string | undefined,
         oauth.id_token as string,
-        true, 
+        true,
       );
       return result;
     }
 
-    // Standard or Hybrid flow with code
     if (this.flow !== "implicit" && code) {
-      timeLocal = Date.now(); // Reset timeLocal *before* async #fetchAccessToken
+      timeLocal = Date.now();
       const response = await this.#fetchAccessToken(
         this.endpoints.token(),
         code,
@@ -683,7 +676,7 @@ export class Keycloak {
         decodeURIComponent(oauth.redirectUri as string),
         oauth.pkceCodeVerifier as string | undefined,
       );
-      // _handleTokenResponse will average timeLocal
+
       _handleTokenResponse(
         response.access_token,
         response.refresh_token,
@@ -692,11 +685,11 @@ export class Keycloak {
       );
       return result;
     }
-    
-    // Should ideally not be reached if one of the above conditions is met.
-    // If it is, it means no error, no tokens in URL, no code.
-    this.#logWarn("[KEYCLOAK] #processCallback: No actionable parameters in callback.");
-    return result; 
+
+    this.#logWarn(
+      "[KEYCLOAK] #processCallback: No actionable parameters in callback.",
+    );
+    return result;
   };
 
   #setToken = (
@@ -776,32 +769,26 @@ export class Keycloak {
 
   #loadConfig = async (): Promise<void> => {
     if (typeof this.#config === "string") {
-      // Case 1: Config is a string URL (path to keycloak.json)
       const jsonConfig = await fetchJSON<IJsonConfig>(this.#config);
       this.authServerUrl = jsonConfig["auth-server-url"];
       this.realm = jsonConfig.realm;
-      // In lib/keycloak.js, 'resource' from JSON config is assigned to clientId
+
       this.clientId = jsonConfig.resource;
       this.endpoints = this.#defaultEndpoints();
     } else {
-      // Config is an object (KeycloakConfigObject)
       const configObject = this.#config as KeycloakConfigObject;
       if (configObject.oidcProvider) {
-        // Case 2: Object with oidcProvider
         this.clientId = configObject.clientId;
         let oidcMetadata: IOpenIdProviderMetadata;
         if (typeof configObject.oidcProvider === "string") {
-          // oidcProvider is a URL, fetch discovery document
           const oidcDiscoveryUrl = `${stripTrailingSlash(configObject.oidcProvider)}/.well-known/openid-configuration`;
-          oidcMetadata = await fetchJSON<IOpenIdProviderMetadata>(oidcDiscoveryUrl);
+          oidcMetadata =
+            await fetchJSON<IOpenIdProviderMetadata>(oidcDiscoveryUrl);
         } else {
-          // oidcProvider is an object, use directly
           oidcMetadata = configObject.oidcProvider;
         }
         this.endpoints = this.#oidcEndpoints(oidcMetadata);
       } else {
-        // Case 3: Object with url, realm, clientId
-        // These properties are guaranteed by KeycloakConfigObject type and constructor checks
         this.authServerUrl = configObject.url;
         this.realm = configObject.realm!;
         this.clientId = configObject.clientId;
@@ -812,9 +799,6 @@ export class Keycloak {
 
   #defaultEndpoints = (): IEndpoints => {
     const realmUrl = this.#getRealmUrl();
-    // realmUrl is string | undefined. lib/keycloak.js allows it to be undefined here,
-    // and errors would occur when an endpoint function is called.
-    // For stricter safety, we could throw if !realmUrl, but matching JS behavior:
     return {
       authorize: () => `${realmUrl}/protocol/openid-connect/auth`,
       token: () => `${realmUrl}/protocol/openid-connect/token`,
@@ -845,8 +829,9 @@ export class Keycloak {
         return oidcConfig.check_session_iframe;
       },
       register: () => {
-        // Matching the exact error message from lib/keycloak.js
-        throw new Error('Redirection to "Register user" page not supported in standard OIDC mode');
+        throw new Error(
+          'Redirection to "Register user" page not supported in standard OIDC mode',
+        );
       },
       userinfo: () => {
         if (!oidcConfig.userinfo_endpoint) {
@@ -854,11 +839,8 @@ export class Keycloak {
         }
         return oidcConfig.userinfo_endpoint;
       },
-      // This endpoint is not defined in OIDC discovery in lib/keycloak.js setupOidcEndpoints
-      // Behavior in lib/keycloak.js is that kc.endpoints.thirdPartyCookiesIframe would be undefined.
-      // Calling an undefined function throws. For defined behavior, we throw an error.
       thirdPartyCookiesIframe: () => {
-         throw new Error("Not supported by the OIDC server");
+        throw new Error("Not supported by the OIDC server");
       },
     };
   };
@@ -901,23 +883,19 @@ export class Keycloak {
     });
   };
 
-  // ---- Public Methods ----
-
-  public login = async (options?: IKeycloakLoginOptions): Promise<void> => {
+  login = async (options?: IKeycloakLoginOptions): Promise<void> => {
     await this.adapter.login(options);
   };
 
-  public logout = async (options?: IKeycloakLogoutOptions): Promise<void> => {
+  logout = async (options?: IKeycloakLogoutOptions): Promise<void> => {
     await this.adapter.logout(options);
   };
 
-  public createLoginUrl = async (
-    options?: IKeycloakLoginOptions,
-  ): Promise<string> => {
+  createLoginUrl = async (options?: IKeycloakLoginOptions): Promise<string> => {
     const state = randomUUID();
     const nonce = randomUUID();
     const redirectUri = this.adapter.redirectUri(options);
-    // Ensure ICallbackState is imported if not already
+
     const callbackState: import("./types.ts").ICallbackState = {
       state,
       nonce,
@@ -956,20 +934,16 @@ export class Keycloak {
       params.append("kc_action", options.action);
     if (options?.locale) params.append("ui_locales", options.locale);
 
-    // Add acr and acr_values handling
     if (options?.acr) {
-      params.append('claims', buildClaimsParameter(options.acr));
+      params.append("claims", buildClaimsParameter(options.acr));
     }
     if (options?.acrValues) {
-      params.append('acr_values', options.acrValues);
+      params.append("acr_values", options.acrValues);
     }
 
     if (this.pkceMethod) {
       const codeVerifier = generateCodeVerifier(96);
-      const pkceChallenge = await generatePkceChallenge(
-        this.pkceMethod,
-        codeVerifier,
-      );
+      const pkceChallenge = await generatePkceChallenge(codeVerifier);
       callbackState.pkceCodeVerifier = codeVerifier;
       params.append("code_challenge", pkceChallenge);
       params.append("code_challenge_method", this.pkceMethod);
@@ -979,7 +953,7 @@ export class Keycloak {
     return `${url}?${params.toString()}`;
   };
 
-  public createLogoutUrl = (options?: IKeycloakLogoutOptions): string => {
+  createLogoutUrl = (options?: IKeycloakLogoutOptions): string => {
     const logoutMethod = options?.logoutMethod ?? this.logoutMethod;
     const url = this.endpoints.logout();
     if (logoutMethod === "POST") return url;
@@ -991,13 +965,13 @@ export class Keycloak {
     return `${url}?${params.toString()}`;
   };
 
-  public createRegisterUrl = async (
+  createRegisterUrl = async (
     options?: IKeycloakRegisterOptions,
   ): Promise<string> => {
     return this.createLoginUrl({ ...options, action: "register" });
   };
 
-  public createAccountUrl = (options?: IKeycloakAccountOptions): string => {
+  createAccountUrl = (options?: IKeycloakAccountOptions): string => {
     const url = this.#getRealmUrl();
     if (!url) {
       throw new Error(
@@ -1011,17 +985,17 @@ export class Keycloak {
     return `${url}/account?${params.toString()}`;
   };
 
-  public accountManagement = async (): Promise<void> => {
+  accountManagement = async (): Promise<void> => {
     await this.adapter.accountManagement();
   };
 
-  public hasRealmRole = (role: string): boolean =>
+  hasRealmRole = (role: string): boolean =>
     !!this.realmAccess?.roles?.includes(role);
 
-  public hasResourceRole = (role: string, resource?: string): boolean =>
+  hasResourceRole = (role: string, resource?: string): boolean =>
     !!this.resourceAccess?.[resource ?? this.clientId]?.roles?.includes(role);
 
-  public loadUserProfile = async (): Promise<IKeycloakProfile> => {
+  loadUserProfile = async (): Promise<IKeycloakProfile> => {
     const realmUrl = this.#getRealmUrl();
     if (!realmUrl) throw new Error("Cannot load user profile; no realm URL");
     const url = `${realmUrl}/account`;
@@ -1032,7 +1006,7 @@ export class Keycloak {
     return profile;
   };
 
-  public loadUserInfo = async (): Promise<Record<string, unknown>> => {
+  loadUserInfo = async (): Promise<Record<string, unknown>> => {
     const url = this.endpoints.userinfo();
     const userInfo = await fetchJSON<Record<string, unknown>>(url, {
       headers: [buildAuthorizationHeader(this.token!)],
@@ -1041,20 +1015,22 @@ export class Keycloak {
     return userInfo;
   };
 
-  public isTokenExpired = (minValidity?: number): boolean => {
+  isTokenExpired = (minValidity?: number): boolean => {
     if (!this.tokenParsed || (!this.refreshToken && this.flow !== "implicit")) {
       throw new Error("Not authenticated");
     }
 
     if (this.timeSkew == undefined) {
-      this.#logInfo("[KEYCLOAK] Unable to determine if token is expired as timeskew is not set");
+      this.#logInfo(
+        "[KEYCLOAK] Unable to determine if token is expired as timeskew is not set",
+      );
       return true;
     }
 
     let expiresIn =
       (this.tokenParsed["exp"] as number) -
       Math.ceil(Date.now() / 1000) +
-      this.timeSkew; // timeSkew is guaranteed to be a number here by the check above
+      this.timeSkew;
 
     if (minValidity) {
       if (isNaN(minValidity)) {
@@ -1065,19 +1041,21 @@ export class Keycloak {
     return expiresIn < 0;
   };
 
-  public updateToken = async (minValidity?: number): Promise<boolean> => {
+  updateToken = async (minValidity?: number): Promise<boolean> => {
     if (!this.refreshToken) {
       throw new Error("Unable to update token, no refresh token available.");
     }
 
-    const M_VALIDITY = minValidity ?? 5; // Use a different name to avoid confusion with parameter
+    const M_VALIDITY = minValidity ?? 5;
 
     if (this.#loginIframe.enable) {
       try {
         await this.checkLoginIframe();
       } catch (iframeError) {
-        // Log error but continue, as per lib/keycloak.js which doesn't stop refresh for iframe error
-        this.#logWarn("[KEYCLOAK] Failed to check login iframe during token update:", iframeError);
+        this.#logWarn(
+          "[KEYCLOAK] Failed to check login iframe during token update:",
+          iframeError,
+        );
       }
     }
 
@@ -1091,21 +1069,20 @@ export class Keycloak {
     }
 
     if (!shouldRefreshToken) {
-      return false; // No refresh needed
+      return false;
     }
 
     return new Promise<boolean>((resolve, reject) => {
       this.#refreshQueue.push({ resolve, reject });
 
       if (this.#refreshQueue.length === 1) {
-        // This is the first request in the queue, so perform the refresh.
         (async () => {
           try {
             const url = this.endpoints.token();
             let timeLocal = Date.now();
             const response = await this.#fetchRefreshToken(
               url,
-              this.refreshToken!, // refreshToken is checked at the beginning
+              this.refreshToken!,
               this.clientId,
             );
             timeLocal = (timeLocal + Date.now()) / 2;
@@ -1124,8 +1101,10 @@ export class Keycloak {
           } catch (error: any) {
             this.#logWarn("[KEYCLOAK] Failed to refresh token");
 
-            // Clear token if the error is a 400 response (e.g. invalid grant)
-            if (error instanceof NetworkError && error.response?.status === 400) {
+            if (
+              error instanceof NetworkError &&
+              error.response?.status === 400
+            ) {
               this.clearToken();
             }
 
@@ -1135,11 +1114,10 @@ export class Keycloak {
           }
         })();
       }
-      // Else, the request is queued and will be resolved/rejected by the active refresh.
     });
   };
 
-  public clearToken = (): void => {
+  clearToken = (): void => {
     if (this.token) {
       this.#setToken(undefined, undefined, undefined);
       this.onAuthLogout?.();
@@ -1195,7 +1173,7 @@ export class Keycloak {
     });
   };
 
-  public scheduleCheckIframe = (): void => {
+  scheduleCheckIframe = (): void => {
     if (!this.#loginIframe.enable) return;
     if (this.token) {
       setTimeout(async () => {
@@ -1205,7 +1183,7 @@ export class Keycloak {
     }
   };
 
-  public checkLoginIframe = async (): Promise<boolean> => {
+  checkLoginIframe = async (): Promise<boolean> => {
     if (this.#loginIframe.iframe && this.#loginIframe.iframeOrigin) {
       const msg = `${this.clientId} ${this.sessionId ?? ""}`;
       return await new Promise<boolean>((resolve, reject) => {
@@ -1224,8 +1202,7 @@ export class Keycloak {
     return true;
   };
 
-  public check3pCookiesSupported = async (): Promise<void> => {
-    // Align precondition with lib/keycloak.js
+  check3pCookiesSupported = async (): Promise<void> => {
     if (
       (!this.#loginIframe.enable && !this.silentCheckSsoRedirectUri) ||
       typeof this.endpoints.thirdPartyCookiesIframe !== "function"
@@ -1249,13 +1226,10 @@ export class Keycloak {
           return;
         }
 
-        if (
-          event.data !== "supported" &&
-          event.data !== "unsupported"
-        ) {
+        if (event.data !== "supported" && event.data !== "unsupported") {
           return;
         }
-        
+
         if (event.data === "unsupported") {
           this.#logWarn(
             "[KEYCLOAK] Your browser is blocking access to 3rd-party cookies, this means:\n\n" +
@@ -1265,7 +1239,7 @@ export class Keycloak {
           );
           this.#loginIframe.enable = false;
           if (this.silentCheckSsoFallback) {
-            this.silentCheckSsoRedirectUri = false; // Align with lib/keycloak.js
+            this.silentCheckSsoRedirectUri = false;
           }
         }
 
@@ -1285,14 +1259,10 @@ export class Keycloak {
       );
     } catch (error) {
       this.#logWarn("[KEYCLOAK] Error during 3rd party cookie check:", error);
-      // If timeout or other error, assume cookies might not be supported or detection failed.
-      // Depending on desired strictness, could disable features here too.
-      // lib/keycloak.js doesn't explicitly disable on timeout, but logs.
-      // Current implementation: log and continue.
     }
   };
 
-  public parseCallback = (url: string): Record<string, any> | undefined => {
+  parseCallback = (url: string): Record<string, any> | undefined => {
     const oauth = this.parseCallbackUrl(url);
     if (!oauth) return undefined;
     const oauthState = this.#callbackStorage.get(oauth.state);
@@ -1307,7 +1277,7 @@ export class Keycloak {
     return oauth;
   };
 
-  public parseCallbackUrl = (url: string): Record<string, any> | undefined => {
+  parseCallbackUrl = (url: string): Record<string, any> | undefined => {
     let supportedParams: string[];
     switch (this.flow) {
       case "standard":
@@ -1399,7 +1369,7 @@ export class Keycloak {
     return undefined;
   };
 
-  public parseCallbackParams = (
+  parseCallbackParams = (
     paramsString: string,
     supportedParams: string[],
   ): { paramsString: string; oauthParams: Record<string, string> } => {

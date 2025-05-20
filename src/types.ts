@@ -8,14 +8,10 @@ export type KeycloakResponseType =
 export type KeycloakFlow = "standard" | "implicit" | "hybrid";
 export type KeycloakPkceMethod = "S256" | false;
 
-// IAcr interface might be removed if not used elsewhere, or kept if it's for a different purpose.
-// For createLoginUrl options.acr, it's a string.
-/*
 export interface IAcr {
   values: string[];
   essential: boolean;
 }
-*/
 
 export interface IKeycloakConfig extends Record<string, unknown> {
   url: string;
@@ -57,7 +53,7 @@ export interface IKeycloakLoginOptions {
   action?: string;
   maxAge?: number;
   loginHint?: string;
-  acr?: string; // Changed from IAcr to string to match lib/keycloak.js options.acr
+  acr?: string;
   acrValues?: string;
   idpHint?: string;
   locale?: string;
@@ -82,11 +78,14 @@ export interface IKeycloakError {
 }
 
 export interface IKeycloakAdapter {
-  login(options?: IKeycloakLoginOptions): Promise<void>;
-  logout(options?: IKeycloakLogoutOptions): Promise<void>;
-  register(options?: IKeycloakRegisterOptions): Promise<void>;
-  accountManagement(): Promise<void>;
-  redirectUri(options?: { redirectUri?: string }, encodeHash?: boolean): string;
+  login: (options?: IKeycloakLoginOptions) => Promise<void>;
+  logout: (options?: IKeycloakLogoutOptions) => Promise<void>;
+  register: (options?: IKeycloakRegisterOptions) => Promise<void>;
+  accountManagement: () => Promise<void>;
+  redirectUri: (
+    options?: { redirectUri?: string },
+    encodeHash?: boolean,
+  ) => string;
 }
 
 export interface IKeycloakProfile {
@@ -106,11 +105,10 @@ export interface IKeycloakRoles {
   roles: string[];
 }
 
-export interface IKeycloakResourceAccess {
-  [key: string]: IKeycloakRoles;
-}
+export interface IKeycloakResourceAccess
+  extends Record<string, IKeycloakRoles> {}
 
-export interface IKeycloakTokenParsed {
+export interface IKeycloakTokenParsed extends Record<string, unknown> {
   iss?: string;
   sub?: string;
   aud?: string;
@@ -124,7 +122,6 @@ export interface IKeycloakTokenParsed {
   session_state?: string;
   realm_access?: IKeycloakRoles;
   resource_access?: IKeycloakResourceAccess;
-  [key: string]: unknown;
 }
 
 export interface IOpenIdProviderMetadata extends Record<string, unknown> {
@@ -146,21 +143,17 @@ export interface IJsonConfig {
   resource?: string;
   clientId?: string;
   url?: string;
-  "auth-server-url": string;
-  realm: string;
-  resource: string; // In lib/keycloak.js, 'resource' is used for clientId from JSON file
 }
 
-// Represents the object that can be passed to the Keycloak constructor
 export type KeycloakConfigObject =
   | {
-      url: string; // Used if oidcProvider is not set
-      realm: string; // Used if oidcProvider is not set
+      url: string;
+      realm: string;
       clientId: string;
       oidcProvider?: never;
     }
   | {
-      oidcProvider: string | IOpenIdProviderMetadata; // URL string or OIDC metadata object
+      oidcProvider: string | IOpenIdProviderMetadata;
       clientId: string;
       url?: never;
       realm?: never;
@@ -176,20 +169,32 @@ export interface IAccessTokenResponse extends Record<string, unknown> {
   session_state?: string;
 }
 
-// Moved from cloak.ts
 export interface ICallbackState {
   state: string;
   nonce: string;
   redirectUri: string;
-  // Assuming IKeycloakLoginOptions is available or will be imported if types.ts is separate
-  loginOptions?: IKeycloakLoginOptions; // Make sure IKeycloakLoginOptions is defined/imported
+  loginOptions?: IKeycloakLoginOptions;
   prompt?: string;
   pkceCodeVerifier?: string;
-  expires?: number; // Used by LocalStorageStore for item expiry
+  expires?: number;
+}
+
+export interface IExpires {
+  expires?: number;
 }
 
 export interface ICallbackStorage {
-  get(state: string): ICallbackState | undefined;
-  add(state: ICallbackState): void;
-  removeItem?(key: string): void; // Optional as it's mainly for cookie management during clear all
+  get: (state: string) => ICallbackState | undefined;
+  add: (state: ICallbackState) => void;
+  removeItem?: (key: string) => void;
+}
+
+export interface IEndpoints {
+  authorize: () => string;
+  token: () => string;
+  logout: () => string;
+  checkSessionIframe: () => string;
+  thirdPartyCookiesIframe: () => string;
+  register: () => string;
+  userinfo: () => string;
 }

@@ -6,6 +6,7 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
-    "strict": true
+    "strict": true,
+    "types": ["node"]
   }
 }

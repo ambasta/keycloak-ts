@@ -259,6 +259,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/node@npm:^22.15.19":
+  version: 22.15.19
+  resolution: "@types/node@npm:22.15.19"
+  dependencies:
+    undici-types: "npm:~6.21.0"
+  checksum: 10c0/8ef52fa1a91b1c8891616d46f3921a9f3c65ad1c6bb62db7899c8c28643c13bf9d607a2403b1e5aceb3e6fa6749efc9e0ba5c39618a4872da6946437b0edbfbe
+  languageName: node
+  linkType: hard
+
 "@types/qs@npm:*":
   version: 6.9.18
   resolution: "@types/qs@npm:6.9.18"
@@ -2555,7 +2564,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "keycloak-js@workspace:."
   dependencies:
-    "@types/node": "npm:^22.15.18"
+    "@types/node": "npm:^22.15.19"
     jszip: "npm:^3.10.1"
     ts-standard: "npm:^12.0.2"
     tslib: "npm:^2.8.1"

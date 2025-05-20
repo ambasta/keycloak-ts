@@ -33,7 +33,7 @@ const RAW_RUNTIME_STATE =
       [null, {\
         "packageLocation": "./",\
         "packageDependencies": [\
-          ["@types/node", "npm:22.15.18"],\
+          ["@types/node", "npm:22.15.19"],\
           ["jszip", "npm:3.10.1"],\
           ["keycloak-js", "workspace:."],\
           ["ts-standard", "virtual:da48d3e1dcd7e7c8b6c38d4640c6ed2871007a8614001ef0c46193a0bb733803a27d5021590e370fca8f8378d34dbde4ee695209e8cbc863e43687f69b58dd4f#npm:12.0.2"],\
@@ -348,6 +348,14 @@ const RAW_RUNTIME_STATE =
         "packageLocation": "./.yarn/cache/@types-node-npm-22.15.18-4e14c3d4f1-e23178c568.zip/node_modules/@types/node/",\
         "packageDependencies": [\
           ["@types/node", "npm:22.15.18"],\
+          ["undici-types", "npm:6.21.0"]\
+        ],\
+        "linkType": "HARD"\
+      }],\
+      ["npm:22.15.19", {\
+        "packageLocation": "./.yarn/cache/@types-node-npm-22.15.19-13a5c1edbe-8ef52fa1a9.zip/node_modules/@types/node/",\
+        "packageDependencies": [\
+          ["@types/node", "npm:22.15.19"],\
           ["undici-types", "npm:6.21.0"]\
         ],\
         "linkType": "HARD"\
@@ -3173,7 +3181,7 @@ const RAW_RUNTIME_STATE =
       ["workspace:.", {\
         "packageLocation": "./",\
         "packageDependencies": [\
-          ["@types/node", "npm:22.15.18"],\
+          ["@types/node", "npm:22.15.19"],\
           ["jszip", "npm:3.10.1"],\
           ["keycloak-js", "workspace:."],\
           ["ts-standard", "virtual:da48d3e1dcd7e7c8b6c38d4640c6ed2871007a8614001ef0c46193a0bb733803a27d5021590e370fca8f8378d34dbde4ee695209e8cbc863e43687f69b58dd4f#npm:12.0.2"],\

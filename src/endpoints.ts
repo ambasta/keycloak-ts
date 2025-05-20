@@ -1,9 +1,9 @@
-import type { IEndpoints } from "./helpers.js";
+import type { IEndpoints, IOpenIdProviderMetadata } from "./types.ts";
 
 export const setupOidcEndpoints = (
   baseUrl: string,
   realm: string,
-  oidcConfig?: any,
+  oidcConfig?: IOpenIdProviderMetadata,
 ): IEndpoints => {
   if (!oidcConfig)
     return {
